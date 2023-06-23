@@ -15,22 +15,25 @@ import RPi.GPIO as GPIO
 
 Sensor = 11      #DHT11管脚
 humiture = 17    #DHT位置
-CLASSES = ['people', 'fall']    #识别l
-cap = cv2.VideoCapture(0)
-cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+temperature = 0  #当前温度
+humidity = 0     #当前湿度
+CLASSES = ['people', 'fall']    #识别标签
+cap = cv2.VideoCapture(0)       #打开摄像头
+cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))    #设置摄像头参数
+#线程管理变量
 fall_running = False
 qr_running = False
 receive_running = True
 check_running = True
 total_running = True
 is_running = False
+#模型位置
 onnx_path = '/home//pi//PycharmProjects//pc8591_main//best.onnx'
 fps_counter = 0  # 帧率计数器
 start_time = time.time()  # 开始时间
 path = []  # 用于存储路径
-found = None
-temperature = 0
-humidity = 0
+found = None  #二维码存储
+
 
 
 # 发送消息
@@ -51,31 +54,6 @@ def send_message(message):
     if message == "stop":
         ser.send("DT")
         print("[INFO] instruction: 停止")
-
-
-# 寻找二维码
-def find_QR():
-    global cap
-    global found
-    global qr_running
-    while (qr_running):
-        frame = cap.read()
-        frame = imutils.resize(frame, width=400)
-        barcodes = pyzbar.decode(frame)
-        for barcode in barcodes:
-            (x, y, w, h) = barcode.rect
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
-            barcodeData = barcode.data.decode("utf-8")
-            barcodeType = barcode.type
-            text = "[INFO] {} ({})".format(barcodeData, barcodeType)
-            if (found == None or found != barcodeData):
-                found = barcodeData
-                print(text)
-                send_message(barcodeData)
-        cv2.imshow("Barcode Scanner", frame)
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord("e"):
-            break
 
 
 # 封装resize函数
@@ -193,7 +171,7 @@ class YOLOV5():
         return pred, or_img
 
 
-model = YOLOV5(onnx_path)
+model = YOLOV5(onnx_path)      #onnx模型初始化
 
 
 # dets:  array [x,6] 6个值分别为x1,y1,x2,y2,score,class
@@ -314,6 +292,7 @@ def draw(image, box_data):
 
 
 def check():
+    #----------全局变量-----------
     global cap
     global model
     global fps_counter
@@ -325,21 +304,26 @@ def check():
     global temperature
     global humidity
     global ser
+    #-----------------------------
 
-    while check_running:
+    while check_running:                  #摄像头运行中
+        #------------------------------发送温湿度信息---------------------------
         current_humidity, current_temperature = DHT.read_retry(Sensor, humiture)
         if current_humidity is not None and current_temperature is not None:
             pass
         else:
             print("[INFO] Failed to get reading. Try again!")
 
-        if current_humidity != humidity or current_temperature != temperature:
+        if current_humidity != humidity or current_temperature != temperature:  #如果不同则更新并发送给单片机
             temperature = current_temperature
             humidity = current_humidity
             print("[INFO] Temperature = {0:0.1f}*C Humidity = {1:0.1f}%"
                   .format(temperature, humidity))
             ser.send("t" + str(temperature))
             ser.send("h" + str(humidity))
+        #-----------------------------------------------------------------------
+
+        #-------------------------------摔倒检测进程-----------------------------
         while fall_running:
             ret, frame = cap.read()
             if ret:
@@ -363,6 +347,8 @@ def check():
             else:
                 print('[INFO] cap error')
                 break
+        #------------------------------------------------------------------------
+        #-------------------------------二维码检测进程----------------------------
         while qr_running:
             ret, frame = cap.read()
             if ret:
@@ -383,17 +369,21 @@ def check():
             else:
                 print('cap error')
                 break
-
+        #------------------------------------------------------------------------
 
 def loop():
+    #-------------------全局变量-------------------
     global qr_running
     global fall_running
     global check_running
     global total_running
     global is_running
     global ser
-
+    #----------------------------------------------
+    
+    #线程管理模块
     while not qr_running and not fall_running and check_running:
+        time.sleep(0.1)
         key = input("input states:")
         if key == "m":
             fall_running = True
@@ -412,13 +402,13 @@ def loop():
             destory()
             total_running = False
 
+    #输入指令控制模块
     while is_running:
         key = input("input command:")
         if key == "e":
             fall_running = False
             qr_running = False
             is_running = False
-            # cv2.destroyAllWindows()
         if len(key) >= 2 and key[0] == 's':
             ser.send(key[1:])
 
@@ -435,6 +425,7 @@ def destory():
     receive_thread.join()
     ser.close()
     cap.release()
+    GPIO.cleanup()
     cv2.destroyAllWindows()
 
 
