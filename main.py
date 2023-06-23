@@ -13,9 +13,9 @@ import imutils
 import Adafruit_DHT as DHT
 import RPi.GPIO as GPIO
 
-Sensor = 11
-humiture = 17
-CLASSES = ['people', 'fall']
+Sensor = 11      #DHT11管脚
+humiture = 17    #DHT位置
+CLASSES = ['people', 'fall']    #识别l
 cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
 fall_running = False
