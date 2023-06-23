@@ -10,11 +10,7 @@ from imutils.video import VideoStream
 from pyzbar import pyzbar
 import datetime
 import imutils
-import Adafruit_DHT as DHT
-import RPi.GPIO as GPIO
 
-Sensor = 11
-humiture = 17
 CLASSES = ['people', 'fall']
 cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
@@ -29,8 +25,6 @@ fps_counter = 0  # 帧率计数器
 start_time = time.time()  # 开始时间
 path = []  # 用于存储路径
 found = None
-temperature = 0
-humidity = 0
 
 
 # 发送消息
@@ -42,15 +36,12 @@ def send_message(message):
     if message == "hou":
         ser.send("DS")
         print("[INFO] instruction: 后退")
-    if message == "zuo":
-        ser.send("DA")
+    if message == "DA":
+        ser.send("z")
         print("[INFO] instruction: 左转")
-    if message == "you":
-        ser.send("DD")
+    if message == "DD":
+        ser.send("y")
         print("[INFO] instruction: 右转")
-    if message == "stop":
-        ser.send("DT")
-        print("[INFO] instruction: 停止")
 
 
 # 寻找二维码
@@ -255,7 +246,7 @@ def filter_box(org_box, conf_thres, iou_thres):  # 过滤掉无用的框
     #	删除置信度小于conf_thres的BOX
     # -------------------------------------------------------
     org_box = np.squeeze(org_box)
-    print("[INFO] reliability: ", max(org_box[..., 4]))
+    print("[INFO] reliability: ",max(org_box[..., 4]))
     conf = org_box[..., 4] > conf_thres
     box = org_box[conf == True]
     # -------------------------------------------------------
@@ -322,24 +313,8 @@ def check():
     global found
     global qr_running
     global fall_running
-    global temperature
-    global humidity
-    global ser
 
     while check_running:
-        current_humidity, current_temperature = DHT.read_retry(Sensor, humiture)
-        if current_humidity is not None and current_temperature is not None:
-            pass
-        else:
-            print("[INFO] Failed to get reading. Try again!")
-
-        if current_humidity != humidity or current_temperature != temperature:
-            temperature = current_temperature
-            humidity = current_humidity
-            print("[INFO] Temperature = {0:0.1f}*C Humidity = {1:0.1f}%"
-                  .format(temperature, humidity))
-            ser.send("t" + str(temperature))
-            ser.send("h" + str(humidity))
         while fall_running:
             ret, frame = cap.read()
             if ret:
@@ -380,6 +355,9 @@ def check():
                         send_message(barcodeData)
                 cv2.imshow("Barcode Scanner", frame)
                 key = cv2.waitKey(1) & 0xFF
+                if key == ord("e"):
+                    qr_running = False
+                    cv2.destroyAllWindows()
             else:
                 print('cap error')
                 break
@@ -418,10 +396,9 @@ def loop():
             fall_running = False
             qr_running = False
             is_running = False
-            # cv2.destroyAllWindows()
+            #cv2.destroyAllWindows()
         if len(key) >= 2 and key[0] == 's':
             ser.send(key[1:])
-
 
 def destory():
     global qr_running
